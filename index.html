@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Конспекты</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232f5bd3'/><text x='16' y='23' font-size='19' text-anchor='middle' fill='white' font-family='serif'>∫</text></svg>">
+  <link rel="stylesheet" href="assets/style.css">
+  <script>
+    // тема применяется до отрисовки, чтобы не мигало
+    try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn menu-btn" id="menuBtn" aria-label="Оглавление">☰</button>
+    <a href="#/" class="brand"><span class="brand-mark">∫</span><span>Конспекты</span></a>
+    <div class="search" id="search">
+      <input id="searchInput" type="search" placeholder="Поиск по конспектам…" autocomplete="off" aria-label="Поиск">
+      <kbd class="search-kbd">/</kbd>
+      <div class="search-pop" id="searchPop" hidden></div>
+    </div>
+    <button class="icon-btn" id="themeBtn" aria-label="Сменить тему" title="Сменить тему"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar" aria-label="Оглавление"></nav>
+    <div class="scrim" id="scrim"></div>
+    <main class="main" id="main"><p class="muted">Загрузка…</p></main>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
