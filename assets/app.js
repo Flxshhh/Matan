@@ -123,7 +123,7 @@
         ${sectionHead(esc(l.title), `${l.sections.length} ${plural(l.sections.length, ['тема', 'темы', 'тем'])}`)}
         <div class="topic-tools" style="margin-bottom:22px">
           <a class="btn primary" href="#/${s.id}/${l.id}/all">Читать целиком</a>
-          <a class="btn" href="${esc(l.file)}" target="_blank" rel="noopener" download>Скачать PDF</a>
+          <a class="btn" href="${esc(l.file)}" target="_blank" rel="noopener nofollow" download>Скачать PDF</a>
         </div>
         <div class="lcards">${l.sections.map((x, i) => card({
           href: `#/${s.id}/${l.id}/${x.id}`,
@@ -162,7 +162,7 @@
           <div class="shead"><h1>${x.whole ? `${esc(lecLabel(l))}. ` : ''}${esc(x.title)}</h1></div>
           <div class="topic-tools">
             ${x.whole ? `<a class="btn" href="#/${s.id}/${l.id}">По темам</a>` : `<button class="btn ${isOn ? 'on' : ''}" id="doneBtn">${isOn ? '✓ Изучено' : 'Отметить изученным'}</button>`}
-            <a class="btn" href="${esc(l.file)}#page=${from}" target="_blank" rel="noopener">PDF ↗</a>
+            <a class="btn" href="${esc(l.file)}#page=${from}" target="_blank" rel="noopener nofollow">PDF ↗</a>
           </div>
         </div>
         <div class="page-range">стр. ${from}${to > from ? '–' + to : ''} · ${to - from + 1} ${pageWord(to - from + 1)}</div>
