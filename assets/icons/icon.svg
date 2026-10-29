@@ -1,18 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4c6ef5"/>
-      <stop offset="1" stop-color="#6741d9"/>
+      <stop offset="0" stop-color="#1e3a8a"/>
+      <stop offset="1" stop-color="#0f1f4d"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <!-- знак интеграла -->
-  <path d="M286 124 C262 96 222 104 216 156 L196 356 C190 410 150 418 126 392"
-        fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round"/>
-  <circle cx="287" cy="126" r="25" fill="#fff"/>
-  <circle cx="125" cy="390" r="25" fill="#fff"/>
-  <!-- строки конспекта -->
-  <rect x="290" y="214" width="112" height="26" rx="13" fill="#fff" opacity=".92"/>
-  <rect x="280" y="270" width="122" height="26" rx="13" fill="#fff" opacity=".7"/>
-  <rect x="270" y="326" width="80" height="26" rx="13" fill="#fff" opacity=".5"/>
+  <!-- знак интеграла по центру -->
+  <g transform="translate(256 258) scale(1.18) translate(-206 -258)">
+    <path d="M286 124 C262 96 222 104 216 156 L196 356 C190 410 150 418 126 392"
+          fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round"/>
+    <circle cx="287" cy="126" r="25" fill="#fff"/>
+    <circle cx="125" cy="390" r="25" fill="#fff"/>
+  </g>
 </svg>
