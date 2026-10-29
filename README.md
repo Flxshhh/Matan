@@ -68,3 +68,8 @@ tools/build.py        — PDF → data/catalog.json + data/search.json
 content/<предмет>/    — PDF и meta.json
 data/                 — сгенерированные файлы (не править руками)
 ```
+
+## Лицензия
+
+Код, дизайн и структура сайта: © 2026 Flxshhh, все права защищены, см. [LICENSE](LICENSE).
+Конспекты лекций в `content/` принадлежат их автору (М. Горбачев, vyshmath.ru) и под эту лицензию не подпадают.
