@@ -45,7 +45,7 @@ kbd { font: 12px var(--font); border: 1px solid var(--border); border-radius: 4p
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; color: var(--text); white-space: nowrap; }
 .brand:hover { text-decoration: none; }
-.brand-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--accent); color: #fff; font-family: var(--serif); font-size: 18px; }
+.brand-mark { display: block; width: 30px; height: 30px; }
 .icon-btn { display: grid; place-items: center; border: 0; background: transparent; color: var(--text); font-size: 18px; width: 36px; height: 36px; border-radius: 8px; cursor: pointer; flex: none; }
 .icon-btn:hover { background: var(--surface-2); }
 .icon-btn.menu-btn { display: none; }
