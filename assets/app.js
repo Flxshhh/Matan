@@ -162,7 +162,6 @@
           <div class="shead"><h1>${x.whole ? `${esc(lecLabel(l))}. ` : ''}${esc(x.title)}</h1></div>
           <div class="topic-tools">
             ${x.whole ? `<a class="btn" href="#/${s.id}/${l.id}">По темам</a>` : `<button class="btn ${isOn ? 'on' : ''}" id="doneBtn">${isOn ? '✓ Изучено' : 'Отметить изученным'}</button>`}
-            <button class="btn ${document.documentElement.classList.contains('invert-pages') ? 'on' : ''}" id="invertBtn" title="Инвертировать цвета страниц для тёмной темы">Тёмные страницы</button>
             <a class="btn" href="${esc(l.file)}#page=${from}" target="_blank" rel="noopener">PDF ↗</a>
           </div>
         </div>
@@ -184,11 +183,6 @@
       </div>`;
 
     if (!x.whole) $('#doneBtn').onclick = () => { toggleDone(s.id, l.id, x.id); route(); };
-    $('#invertBtn').onclick = () => {
-      const on = document.documentElement.classList.toggle('invert-pages');
-      $('#invertBtn').classList.toggle('on', on);
-      store.set('invertPages', on);
-    };
     main.querySelectorAll('.chip').forEach((c) => (c.onclick = () => scrollToPage(+c.dataset.page)));
     main.querySelectorAll('[data-zoom]').forEach((b) => (b.onclick = () => {
       const z = b.dataset.zoom;
@@ -630,7 +624,6 @@
   upBtn.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
   window.addEventListener('scroll', () => upBtn.classList.toggle('show', scrollY > 600), { passive: true });
 
-  if (store.get('invertPages', false)) document.documentElement.classList.add('invert-pages');
   $('#menuBtn').onclick = () => document.body.classList.toggle('nav-open');
   $('#scrim').onclick = () => document.body.classList.remove('nav-open');
 

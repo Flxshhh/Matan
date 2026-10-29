@@ -203,8 +203,14 @@ h1 { font-size: 30px; line-height: 1.2; font-weight: 800; letter-spacing: -.01em
 .page canvas { display: block; width: 100%; height: 100%; }
 .page .pno { position: absolute; right: 12px; bottom: 8px; font-size: 11px; color: #999; z-index: 3; }
 .page.loading::before { content: "…"; position: absolute; inset: 0; display: grid; place-items: center; color: #aaa; }
-:root.invert-pages .page canvas { filter: invert(.9) hue-rotate(180deg); }
-:root.invert-pages .page { background: #1a1a1a; }
+/* Страницы PDF следуют теме сайта: в тёмной теме цвета инвертируются
+   (hue-rotate возвращает оттенки цветных рамок и графиков) */
+:root[data-theme="dark"] .page canvas { filter: invert(.88) hue-rotate(180deg); }
+:root[data-theme="dark"] .page { background: #1e1e1e; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .page canvas { filter: invert(.88) hue-rotate(180deg); }
+  :root:not([data-theme="light"]) .page { background: #1e1e1e; }
+}
 .pager { display: flex; justify-content: space-between; gap: 14px; margin-top: 28px; }
 .pager a { flex: 1; max-width: 48%; padding: 18px 22px; border-radius: 22px; background: var(--surface); color: var(--text); font-weight: 700; }
 .pager a:hover { color: var(--accent); }
