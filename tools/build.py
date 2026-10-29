@@ -144,6 +144,7 @@ def main():
             "title": meta.get("title", sdir.name),
             "short": meta.get("short", meta.get("title", sdir.name)),
             "description": meta.get("description", ""),
+            "color": meta.get("color", "#4a7cf0"),
             "order": meta.get("order", 100),
             "lectures": lectures,
         })

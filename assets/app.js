@@ -1,6 +1,6 @@
 /* Конспекты: навигация, просмотр тем (PDF.js), поиск.
    Маршруты (hash):
-     #/                         — все предметы
+     #/                         — последний открытый предмет
      #/<предмет>                — список лекций
      #/<предмет>/<лекция>       — темы лекции
      #/<предмет>/<лекция>/<тема>?p=<стр>&q=<запрос>
@@ -66,37 +66,52 @@
   }
 
   // ---------- Страницы ----------
+  const plural = (n, [one, few, many]) =>
+    n % 10 === 1 && n % 100 !== 11 ? one : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? few : many;
+  const chevron = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+  const DEFAULT_COLOR = '#4a7cf0';
+
+  // вкладки-«таблетки» с предметами, у каждого свой цвет
+  const subjectPills = (cur) => `
+    <nav class="pills" aria-label="Предметы">${catalog.subjects.map((s) => `
+      <a class="pill ${cur && cur.id === s.id ? 'active' : ''}" style="--c:${esc(s.color || DEFAULT_COLOR)}" href="#/${s.id}">${esc(s.title)}</a>`).join('')}
+    </nav>`;
+
+  const sectionHead = (title, badge) => `
+    <div class="shead"><h1>${title}</h1>${badge ? `<span class="badge">${badge}</span>` : ''}</div>`;
+
+  // большая белая карточка: заголовок, описание, «Читать ›» и мета справа
+  const card = ({ href, title, desc, meta, done }) => `
+    <a class="lcard ${done ? 'is-done' : ''}" href="${href}">
+      <h3>${title}</h3>
+      ${desc ? `<p>${desc}</p>` : ''}
+      <div class="lcard-foot"><span class="read">Читать ${chevron}</span><span class="lcard-meta">${meta || ''}</span></div>
+    </a>`;
+
   function viewHome() {
-    document.title = 'Конспекты';
-    main.innerHTML = `
-      <div>
-        <h1>Конспекты</h1>
-        <p class="lead">Выбери предмет, лекцию и тему — или ищи сразу по всем конспектам.</p>
-        <div class="cards">${catalog.subjects.map((s) => {
-          const total = s.lectures.reduce((a, l) => a + l.sections.length, 0);
-          const d = s.lectures.reduce((a, l) => a + l.sections.filter((x) => isDone(s.id, l.id, x.id)).length, 0);
-          return `<a class="card" href="#/${s.id}">
-            <h3>${esc(s.title)}</h3><p>${esc(s.description)}</p>
-            <div class="meta">${s.lectures.length} лекций · ${total} тем · изучено ${d}</div>
-            <div class="progress"><i style="width:${total ? (100 * d) / total : 0}%"></i></div></a>`;
-        }).join('')}</div>
-      </div>`;
+    const s = catalog.subjects.find((x) => x.id === store.get('lastSubject')) || catalog.subjects[0];
+    if (s) viewSubject(s); else main.innerHTML = '<div><h1>Пока пусто</h1></div>';
   }
 
   function viewSubject(s) {
     document.title = s.title;
+    store.set('lastSubject', s.id);
     main.innerHTML = `
       <div>
-        <div class="crumbs"><a href="#/">Предметы</a></div>
-        <h1>${esc(s.title)}</h1>
-        <p class="lead">${esc(s.description)}</p>
-        <ul class="lec-list">${s.lectures.map((l) => `
-          <li class="lec-item">
-            <h3><a href="#/${s.id}/${l.id}"><span class="num">${l.number ?? ''}</span>${esc(l.title)}</a></h3>
-            <ol class="topic-list">${l.sections.map((x) => `
-              <li class="${isDone(s.id, l.id, x.id) ? 'done' : ''}"><a href="#/${s.id}/${l.id}/${x.id}">${esc(x.title)}</a></li>`).join('')}
-            </ol></li>`).join('')}
-        </ul>
+        ${subjectPills(s)}
+        ${sectionHead(esc(s.title), `${s.lectures.length} ${plural(s.lectures.length, ['лекция', 'лекции', 'лекций'])}`)}
+        ${s.description ? `<p class="lead">${esc(s.description)}</p>` : ''}
+        <div class="lcards">${s.lectures.map((l) => {
+          const d = l.sections.filter((x) => isDone(s.id, l.id, x.id)).length;
+          const n = l.sections.length;
+          return card({
+            href: `#/${s.id}/${l.id}`,
+            title: `${l.number != null ? `<span class="num">${l.number}.</span> ` : ''}${esc(l.title)}`,
+            desc: l.sections.map((x) => esc(x.title.replace(/\.$/, ''))).join(' · '),
+            meta: d ? `<span class="ok">✓ ${d}/${n}</span>` : `${n} ${plural(n, ['тема', 'темы', 'тем'])}`,
+            done: d === n && n > 0,
+          });
+        }).join('')}</div>
       </div>`;
   }
 
@@ -104,20 +119,19 @@
     document.title = `${l.title} — ${s.short}`;
     main.innerHTML = `
       <div>
-        <div class="crumbs"><a href="#/">Предметы</a> / <a href="#/${s.id}">${esc(s.short)}</a></div>
-        <div class="topic-head">
-          <div><h1>${esc(l.title)}</h1><p class="lead">${lecLabel(l)} · ${l.sections.length} тем · ${l.pageCount} стр.</p></div>
-          <div class="topic-tools">
-            <a class="btn primary" href="#/${s.id}/${l.id}/all">Читать целиком</a>
-            <a class="btn" href="${esc(l.file)}" target="_blank" rel="noopener" download>Скачать PDF</a>
-          </div>
+        <div class="crumbs"><a href="#/${s.id}">${esc(s.title)}</a> <span>›</span> ${esc(lecLabel(l))}</div>
+        ${sectionHead(esc(l.title), `${l.sections.length} ${plural(l.sections.length, ['тема', 'темы', 'тем'])}`)}
+        <div class="topic-tools" style="margin-bottom:22px">
+          <a class="btn primary" href="#/${s.id}/${l.id}/all">Читать целиком</a>
+          <a class="btn" href="${esc(l.file)}" target="_blank" rel="noopener" download>Скачать PDF</a>
         </div>
-        <div class="cards">${l.sections.map((x, i) => `
-          <a class="card" href="#/${s.id}/${l.id}/${x.id}">
-            <h3>${i + 1}. ${esc(x.title)} ${isDone(s.id, l.id, x.id) ? '<span style="color:var(--ok)">✓</span>' : ''}</h3>
-            ${x.subsections.length ? `<p>${x.subsections.map((t) => esc(t.title)).join(' · ')}</p>` : ''}
-            <div class="meta">стр. ${x.pages[0]}${x.pages[1] > x.pages[0] ? '–' + x.pages[1] : ''}</div>
-          </a>`).join('')}</div>
+        <div class="lcards">${l.sections.map((x, i) => card({
+          href: `#/${s.id}/${l.id}/${x.id}`,
+          title: `<span class="num">${i + 1}.</span> ${esc(x.title)}`,
+          desc: x.subsections.map((t) => esc(t.title.replace(/[.:]$/, ''))).join(' · '),
+          meta: `${isDone(s.id, l.id, x.id) ? '<span class="ok">✓</span> ' : ''}стр. ${x.pages[0]}${x.pages[1] > x.pages[0] ? '–' + x.pages[1] : ''}`,
+          done: isDone(s.id, l.id, x.id),
+        })).join('')}</div>
       </div>`;
   }
 
@@ -143,16 +157,16 @@
     const isOn = !x.whole && isDone(s.id, l.id, x.id);
     main.innerHTML = `
       <div>
-        <div class="crumbs"><a href="#/">Предметы</a> / <a href="#/${s.id}">${esc(s.short)}</a>${x.whole ? '' : ` / <a href="#/${s.id}/${l.id}">${esc(lecLabel(l))}. ${esc(l.title)}</a>`}</div>
+        <div class="crumbs"><a href="#/${s.id}">${esc(s.title)}</a> <span>›</span> <a href="#/${s.id}/${l.id}">${esc(lecLabel(l))}</a>${x.whole ? '' : ` <span>›</span> ${esc(x.title)}`}</div>
         <div class="topic-head">
-          <h1>${x.whole ? `${esc(lecLabel(l))}. ` : ''}${esc(x.title)}</h1>
+          <div class="shead"><h1>${x.whole ? `${esc(lecLabel(l))}. ` : ''}${esc(x.title)}</h1></div>
           <div class="topic-tools">
             ${x.whole ? `<a class="btn" href="#/${s.id}/${l.id}">По темам</a>` : `<button class="btn ${isOn ? 'on' : ''}" id="doneBtn">${isOn ? '✓ Изучено' : 'Отметить изученным'}</button>`}
             <button class="btn ${document.documentElement.classList.contains('invert-pages') ? 'on' : ''}" id="invertBtn" title="Инвертировать цвета страниц для тёмной темы">Тёмные страницы</button>
             <a class="btn" href="${esc(l.file)}#page=${from}" target="_blank" rel="noopener">PDF ↗</a>
           </div>
         </div>
-        <div class="muted" style="font-size:13px">стр. ${from}${to > from ? '–' + to : ''} · ${to - from + 1} ${pageWord(to - from + 1)}</div>
+        <div class="page-range">стр. ${from}${to > from ? '–' + to : ''} · ${to - from + 1} ${pageWord(to - from + 1)}</div>
         ${x.subsections.length ? `<div class="chips">${x.subsections.map((t) => `<button class="chip" data-page="${t.page}">${esc(t.title)}</button>`).join('')}</div>` : ''}
         <div class="viewer-bar">
           <button class="btn sq" data-zoom="out" title="Уменьшить (−)" aria-label="Уменьшить">−</button>
@@ -540,13 +554,23 @@
   });
 
   // ---------- Тема, меню ----------
-  $('#themeBtn').onclick = () => {
-    const root = document.documentElement;
-    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-    root.dataset.theme = dark ? 'light' : 'dark';
-    store.set('theme', root.dataset.theme);
+  const root = document.documentElement;
+  const effectiveTheme = () => root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const syncThemeBtns = () => document.querySelectorAll('[data-set-theme]').forEach((b) =>
+    b.classList.toggle('active', b.dataset.setTheme === effectiveTheme()));
+  document.querySelectorAll('[data-set-theme]').forEach((b) => (b.onclick = () => {
+    root.dataset.theme = b.dataset.setTheme;
     try { localStorage.setItem('theme', root.dataset.theme); } catch (e) { /* ignore */ }
-  };
+    syncThemeBtns();
+  }));
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncThemeBtns);
+  syncThemeBtns();
+
+  // кнопка «наверх»
+  const upBtn = $('#upBtn');
+  upBtn.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.addEventListener('scroll', () => upBtn.classList.toggle('show', scrollY > 600), { passive: true });
+
   if (store.get('invertPages', false)) document.documentElement.classList.add('invert-pages');
   $('#menuBtn').onclick = () => document.body.classList.toggle('nav-open');
   $('#scrim').onclick = () => document.body.classList.remove('nav-open');
@@ -564,6 +588,8 @@
     const [sId, lId, secId] = parts;
     const { subject, lecture, section } = sId ? find(sId, lId, secId) : {};
     renderSidebar({ s: sId, l: lId, sec: secId });
+    const accentOf = subject || catalog.subjects.find((x) => x.id === store.get('lastSubject')) || catalog.subjects[0];
+    root.style.setProperty('--accent', (accentOf && accentOf.color) || DEFAULT_COLOR);
     const key = parts.join('/');
     if (key !== lastKey) window.scrollTo(0, 0);
     lastKey = key;
