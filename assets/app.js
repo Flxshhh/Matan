@@ -107,7 +107,10 @@
         <div class="crumbs"><a href="#/">Предметы</a> / <a href="#/${s.id}">${esc(s.short)}</a></div>
         <div class="topic-head">
           <div><h1>${esc(l.title)}</h1><p class="lead">${lecLabel(l)} · ${l.sections.length} тем · ${l.pageCount} стр.</p></div>
-          <div class="topic-tools"><a class="btn" href="${esc(l.file)}" target="_blank" rel="noopener">PDF целиком ↗</a></div>
+          <div class="topic-tools">
+            <a class="btn primary" href="#/${s.id}/${l.id}/all">Читать целиком</a>
+            <a class="btn" href="${esc(l.file)}" target="_blank" rel="noopener" download>Скачать PDF</a>
+          </div>
         </div>
         <div class="cards">${l.sections.map((x, i) => `
           <a class="card" href="#/${s.id}/${l.id}/${x.id}">
@@ -125,39 +128,56 @@
     return { prev: flat[i - 1], next: flat[i + 1] };
   }
 
+  // Вся лекция одним «документом»: темы становятся кнопками-переходами
+  const wholeLecture = (l) => ({
+    id: 'all', title: l.title, whole: true, pages: [1, l.pageCount],
+    subsections: l.sections.map((x) => ({ title: x.title, page: x.pages[0] })),
+  });
+
   function viewSection(s, l, x, params) {
     document.title = `${x.title} — ${s.short}`;
     const [from, to] = x.pages;
-    const { prev, next } = neighbours(s, l, x);
+    const { prev, next } = x.whole ? {} : neighbours(s, l, x);
     const q = params.get('q') || '';
     const link = (f, cls, label) => f ? `<a class="${cls}" href="#/${s.id}/${f.lec.id}/${f.sec.id}"><small>${label}${f.lec !== l ? ' · ' + esc(lecLabel(f.lec)) : ''}</small>${esc(f.sec.title)}</a>` : '';
-    const isOn = isDone(s.id, l.id, x.id);
+    const isOn = !x.whole && isDone(s.id, l.id, x.id);
     main.innerHTML = `
       <div>
-        <div class="crumbs"><a href="#/">Предметы</a> / <a href="#/${s.id}">${esc(s.short)}</a> / <a href="#/${s.id}/${l.id}">${esc(lecLabel(l))}. ${esc(l.title)}</a></div>
+        <div class="crumbs"><a href="#/">Предметы</a> / <a href="#/${s.id}">${esc(s.short)}</a>${x.whole ? '' : ` / <a href="#/${s.id}/${l.id}">${esc(lecLabel(l))}. ${esc(l.title)}</a>`}</div>
         <div class="topic-head">
-          <h1>${esc(x.title)}</h1>
+          <h1>${x.whole ? `${esc(lecLabel(l))}. ` : ''}${esc(x.title)}</h1>
           <div class="topic-tools">
-            <button class="btn ${isOn ? 'on' : ''}" id="doneBtn">${isOn ? '✓ Изучено' : 'Отметить изученным'}</button>
+            ${x.whole ? `<a class="btn" href="#/${s.id}/${l.id}">По темам</a>` : `<button class="btn ${isOn ? 'on' : ''}" id="doneBtn">${isOn ? '✓ Изучено' : 'Отметить изученным'}</button>`}
             <button class="btn ${document.documentElement.classList.contains('invert-pages') ? 'on' : ''}" id="invertBtn" title="Инвертировать цвета страниц для тёмной темы">Тёмные страницы</button>
             <a class="btn" href="${esc(l.file)}#page=${from}" target="_blank" rel="noopener">PDF ↗</a>
           </div>
         </div>
         <div class="muted" style="font-size:13px">стр. ${from}${to > from ? '–' + to : ''} · ${to - from + 1} ${pageWord(to - from + 1)}</div>
         ${x.subsections.length ? `<div class="chips">${x.subsections.map((t) => `<button class="chip" data-page="${t.page}">${esc(t.title)}</button>`).join('')}</div>` : ''}
-        <div class="pages" id="pages"></div>
+        <div class="viewer-bar">
+          <button class="btn sq" data-zoom="out" title="Уменьшить (−)" aria-label="Уменьшить">−</button>
+          <button class="btn zoom-val" data-zoom="fit" title="По ширине (0)" id="zoomVal">100%</button>
+          <button class="btn sq" data-zoom="in" title="Увеличить (+)" aria-label="Увеличить">+</button>
+          <span class="page-ind" id="pageInd"></span>
+        </div>
+        <div class="viewer" id="viewer"><div class="pages" id="pages"></div></div>
         <nav class="pager">${link(prev, 'prev', '← Назад')}${link(next, 'next', 'Дальше →')}</nav>
       </div>`;
 
-    $('#doneBtn').onclick = () => { toggleDone(s.id, l.id, x.id); route(); };
+    if (!x.whole) $('#doneBtn').onclick = () => { toggleDone(s.id, l.id, x.id); route(); };
     $('#invertBtn').onclick = () => {
       const on = document.documentElement.classList.toggle('invert-pages');
       $('#invertBtn').classList.toggle('on', on);
       store.set('invertPages', on);
     };
     main.querySelectorAll('.chip').forEach((c) => (c.onclick = () => scrollToPage(+c.dataset.page)));
+    main.querySelectorAll('[data-zoom]').forEach((b) => (b.onclick = () => {
+      const z = b.dataset.zoom;
+      setZoom(z === 'fit' ? 1 : zoom * (z === 'in' ? 1.25 : 0.8));
+    }));
+    applyZoomWidth();
 
-    renderPages(l.file, from, to, q).then(() => {
+    renderPages(l.file, from, to, q, l.pageCount).then(() => {
       const p = +params.get('p');
       if (p >= from && p <= to) scrollToPage(p);
     });
@@ -165,8 +185,66 @@
 
   function scrollToPage(p) {
     const el = document.querySelector(`.page[data-page="${p}"]`);
-    if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 70, behavior: 'smooth' });
+    if (!el) return;
+    window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 120, behavior: 'smooth' });
+    const v = $('#viewer');
+    if (v) v.scrollLeft = 0;
   }
+
+  // ---------- Масштаб ----------
+  // zoom — ширина страниц относительно колонки. Картинка страницы всегда
+  // перерисовывается под реальный размер на экране (с учётом devicePixelRatio
+  // и pinch-зума телефона), поэтому при увеличении текст остаётся чётким.
+  const ZOOM_MIN = 0.5, ZOOM_MAX = 5;
+  let zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +store.get('zoom', 1) || 1));
+  let zoomTimer;
+
+  function applyZoomWidth() {
+    const pages = $('#pages');
+    if (pages) pages.style.width = `${zoom * 100}%`;
+    const val = $('#zoomVal');
+    if (val) val.textContent = `${Math.round(zoom * 100)}%`;
+  }
+
+  function setZoom(z) {
+    z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+    if (Math.abs(z - 1) < 0.04) z = 1;
+    const viewer = $('#viewer');
+    if (!viewer || z === zoom) return;
+    // запоминаем, какая точка страницы в центре экрана, чтобы после зума остаться там же
+    const cy = innerHeight / 2;
+    const anchor = [...document.querySelectorAll('.page')].find((d) => {
+      const r = d.getBoundingClientRect();
+      return r.top <= cy && r.bottom >= cy;
+    });
+    const frac = anchor ? (cy - anchor.getBoundingClientRect().top) / anchor.offsetHeight : 0;
+    const vw = viewer.clientWidth;
+    const xFrac = (viewer.scrollLeft + vw / 2) / viewer.scrollWidth;
+
+    zoom = z;
+    store.set('zoom', zoom);
+    applyZoomWidth();
+
+    if (anchor) window.scrollTo(0, anchor.getBoundingClientRect().top + scrollY + frac * anchor.offsetHeight - cy);
+    viewer.scrollLeft = xFrac * viewer.scrollWidth - vw / 2;
+    // пока пользователь крутит — страницы просто растягиваются, чёткость догоняет следом
+    clearTimeout(zoomTimer);
+    zoomTimer = setTimeout(refreshPages, 200);
+  }
+
+  // Ctrl + колесо / щипок на тачпаде — зум страниц, а не всего сайта
+  document.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey || !e.target.closest || !e.target.closest('#viewer')) return;
+    e.preventDefault();
+    setZoom(zoom * Math.exp(-e.deltaY * 0.01));
+  }, { passive: false });
+
+  document.addEventListener('keydown', (e) => {
+    if (!$('#viewer') || /INPUT|TEXTAREA/.test(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === '+' || e.key === '=') setZoom(zoom * 1.25);
+    else if (e.key === '-') setZoom(zoom * 0.8);
+    else if (e.key === '0') setZoom(1);
+  });
 
   // ---------- PDF ----------
   const docs = new Map();
@@ -176,8 +254,12 @@
   };
   let renderToken = 0;
   let observer = null;
+  let current = null; // { doc, query, token } текущего просмотра
+  const NEAR = 1500;  // px: страницы ближе — держим отрисованными, дальше — освобождаем память
+  // iOS не даёт canvas больше ~16.7 Мп, да и память не резиновая
+  const MAX_PIXELS = 14e6;
 
-  async function renderPages(file, from, to, query) {
+  async function renderPages(file, from, to, query, total) {
     const token = ++renderToken;
     const box = $('#pages');
     let doc;
@@ -196,38 +278,87 @@
       div.style.aspectRatio = `${vp0.width} / ${vp0.height}`;
       box.appendChild(div);
     }
+    current = { doc, query, token, total };
     if (observer) observer.disconnect();
-    // рисуем только страницы рядом с экраном
+    // рисуем только страницы рядом с экраном, далёкие — выгружаем
     observer = new IntersectionObserver((entries) => {
       for (const e of entries) {
-        if (!e.isIntersecting || e.target.dataset.rendered) continue;
-        e.target.dataset.rendered = '1';
-        drawPage(doc, e.target, query, token);
+        if (e.isIntersecting) { if (needsDraw(e.target)) drawPage(e.target); }
+        else if (e.target.dataset.rendered) unloadPage(e.target);
       }
-    }, { rootMargin: '1200px 0px' });
+    }, { rootMargin: `${NEAR}px ${NEAR}px` });
     box.querySelectorAll('.page').forEach((d) => observer.observe(d));
+    updatePageInd();
   }
 
-  async function drawPage(doc, div, query, token) {
+  // во сколько раз больше пикселей нужно, чем CSS-размер: экран + pinch-зум телефона
+  function pixelRatio() {
+    const pinch = window.visualViewport ? visualViewport.scale : 1;
+    return Math.min((window.devicePixelRatio || 1) * Math.max(1, pinch), 8);
+  }
+
+  function needsDraw(div) {
+    if (!div.dataset.rendered) return true;
+    if (!div.dataset.width) return false; // ещё рисуется — проверим по окончании
+    if (Math.abs(div.clientWidth - +div.dataset.width) > 2) return true;
+    // перерисовываем, только если чёткость заметно отстаёт (или сильно избыточна)
+    const want = Math.min(pixelRatio(), +div.dataset.maxRatio || Infinity);
+    const have = +div.dataset.ratio;
+    return want > have * 1.15 || want < have / 2;
+  }
+
+  function unloadPage(div) {
+    const c = div.querySelector('canvas');
+    if (c) { c.width = 0; c.height = 0; } // Safari освобождает память только так
+    div.innerHTML = '';
+    div.classList.add('loading');
+    delete div.dataset.rendered;
+  }
+
+  function isNear(div) {
+    const r = div.getBoundingClientRect();
+    return r.bottom > -NEAR && r.top < innerHeight + NEAR;
+  }
+
+  function refreshPages() {
+    document.querySelectorAll('.page').forEach((d) => {
+      if (!isNear(d)) { if (d.dataset.rendered) unloadPage(d); }
+      else if (needsDraw(d)) drawPage(d);
+    });
+  }
+
+  async function drawPage(div) {
+    const { doc, query, token } = current;
+    const drawId = (div._drawId || 0) + 1;
+    div._drawId = drawId;
+    div.dataset.rendered = '1';
     const page = await doc.getPage(+div.dataset.page);
-    if (token !== renderToken) return;
+    if (token !== renderToken || div._drawId !== drawId) return;
     const cssWidth = div.clientWidth;
     const scale = cssWidth / page.getViewport({ scale: 1 }).width;
     const viewport = page.getViewport({ scale });
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const maxRatio = Math.sqrt(MAX_PIXELS / (viewport.width * viewport.height));
+    const ratio = Math.min(pixelRatio(), maxRatio);
     const canvas = document.createElement('canvas');
-    canvas.width = Math.floor(viewport.width * dpr);
-    canvas.height = Math.floor(viewport.height * dpr);
-    await page.render({
-      canvasContext: canvas.getContext('2d'),
-      viewport,
-      transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null,
-    }).promise;
-    if (token !== renderToken) return;
+    canvas.width = Math.floor(viewport.width * ratio);
+    canvas.height = Math.floor(viewport.height * ratio);
+    try {
+      await page.render({
+        canvasContext: canvas.getContext('2d'),
+        viewport,
+        transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null,
+      }).promise;
+    } catch (e) { return; }
+    if (token !== renderToken || div._drawId !== drawId) { canvas.width = 0; return; }
+    // меняем картинку только когда новая готова — без мигания
+    const old = div.querySelector('canvas');
+    if (old) { old.width = 0; old.height = 0; }
     div.classList.remove('loading');
     div.innerHTML = `<span class="pno">${div.dataset.page}</span>`;
     div.prepend(canvas);
     div.dataset.width = cssWidth;
+    div.dataset.ratio = ratio;
+    div.dataset.maxRatio = maxRatio;
 
     // текстовый слой: выделение текста + подсветка найденного
     const layer = document.createElement('div');
@@ -239,7 +370,26 @@
       textContentSource: page.streamTextContent(), container: layer, viewport, textDivs,
     }).promise;
     if (query) highlight(textDivs, terms(query));
+    // пока рисовали, масштаб могли поменять — догоняем
+    if (div._drawId === drawId && needsDraw(div)) drawPage(div);
   }
+
+  // номер страницы, которая сейчас наверху экрана
+  function updatePageInd() {
+    const ind = $('#pageInd');
+    if (!ind || !current) return;
+    const y = 140;
+    const pages = document.querySelectorAll('.page');
+    let cur = pages[0];
+    for (const d of pages) { if (d.getBoundingClientRect().top <= y) cur = d; else break; }
+    if (cur) ind.textContent = `стр. ${cur.dataset.page} из ${current.total}`;
+  }
+  let indQueued = false;
+  window.addEventListener('scroll', () => {
+    if (indQueued) return;
+    indQueued = true;
+    requestAnimationFrame(() => { indQueued = false; updatePageInd(); });
+  }, { passive: true });
 
   function highlight(spans, ts) {
     if (!ts.length) return;
@@ -252,15 +402,18 @@
     }
   }
 
-  // при заметном изменении ширины перерисовываем страницы
+  // поменялась ширина окна, масштаб браузера или pinch-зум на телефоне —
+  // догоняем чёткость (перерисовываются только страницы рядом с экраном)
   let resizeTimer;
-  window.addEventListener('resize', () => {
+  const onResize = () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      const pg = $('.page[data-width]');
-      if (pg && Math.abs(pg.clientWidth - +pg.dataset.width) > 40) route();
-    }, 250);
-  });
+    resizeTimer = setTimeout(() => { if ($('#pages')) refreshPages(); }, 300);
+  };
+  window.addEventListener('resize', onResize);
+  if (window.visualViewport) {
+    visualViewport.addEventListener('resize', onResize);
+    visualViewport.addEventListener('scroll', onResize); // при зуме пальцами двигаемся по странице
+  }
 
   // ---------- Поиск ----------
   const terms = (q) => norm(q).split(/\s+/).filter((t) => t.length > 1);
@@ -419,6 +572,7 @@
     if (!lId) return viewSubject(subject);
     if (!lecture) return (main.innerHTML = `<div><h1>Лекция не найдена</h1><a href="#/${sId}">К предмету</a></div>`);
     if (!secId) return viewLecture(subject, lecture);
+    if (secId === 'all') return viewSection(subject, lecture, wholeLecture(lecture), params);
     if (!section) return viewLecture(subject, lecture);
     viewSection(subject, lecture, section, params);
   }
