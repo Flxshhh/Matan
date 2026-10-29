@@ -172,10 +172,15 @@
           <button class="btn sq" data-zoom="out" title="Уменьшить (−)" aria-label="Уменьшить">−</button>
           <button class="btn zoom-val" data-zoom="fit" title="По ширине (0)" id="zoomVal">100%</button>
           <button class="btn sq" data-zoom="in" title="Увеличить (+)" aria-label="Увеличить">+</button>
-          <span class="page-ind" id="pageInd"></span>
+          <div class="pnav">
+            <button class="btn sq" id="prevPage" title="Предыдущая страница (←)" aria-label="Предыдущая страница">${chevronLeft}</button>
+            <span class="page-ind" id="pageInd"></span>
+            <button class="btn sq primary" id="nextPage" title="Следующая страница (→)" aria-label="Следующая страница">${chevron}</button>
+          </div>
         </div>
-        <div class="viewer" id="viewer"><div class="pages" id="pages"></div></div>
-        <nav class="pager">${link(prev, 'prev', '← Назад')}${link(next, 'next', 'Дальше →')}</nav>
+        <div class="viewer" id="viewer"></div>
+        <div class="dots" id="dots"></div>
+        <nav class="pager">${link(prev, 'prev', '← Предыдущая тема')}${link(next, 'next', 'Следующая тема →')}</nav>
       </div>`;
 
     if (!x.whole) $('#doneBtn').onclick = () => { toggleDone(s.id, l.id, x.id); route(); };
@@ -189,21 +194,51 @@
       const z = b.dataset.zoom;
       setZoom(z === 'fit' ? 1 : zoom * (z === 'in' ? 1.25 : 0.8));
     }));
+    // после последней страницы «вперёд» ведёт в следующую тему, до первой — в конец предыдущей
+    const topicHref = (f, atEnd) => f ? `#/${s.id}/${f.lec.id}/${f.sec.id}${atEnd ? `?p=${f.sec.pages[1]}` : ''}` : null;
+    flip = { nextTopic: topicHref(next, false), prevTopic: topicHref(prev, true), nextTitle: next && next.sec.title };
+    $('#prevPage').onclick = () => flipPage(-1);
+    $('#nextPage').onclick = () => flipPage(1);
     applyZoomWidth();
 
     renderPages(l.file, from, to, q, l.pageCount).then(() => {
       const p = +params.get('p');
-      if (p >= from && p <= to) scrollToPage(p);
+      if (p >= from && p <= to) scrollToPage(p, false);
     });
   }
 
-  function scrollToPage(p) {
-    const el = document.querySelector(`.page[data-page="${p}"]`);
-    if (!el) return;
-    window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 120, behavior: 'smooth' });
-    const v = $('#viewer');
-    if (v) v.scrollLeft = 0;
+  // ---------- Листание страниц вбок ----------
+  let flip = {};
+  let curIdx = 0;
+  const slides = () => document.querySelectorAll('#viewer .slide');
+
+  function goToSlide(i, smooth = true) {
+    const viewer = $('#viewer');
+    const n = slides().length;
+    if (!viewer || !n) return;
+    curIdx = Math.max(0, Math.min(n - 1, i));
+    viewer.scrollTo({ left: curIdx * viewer.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+    // если страницу прокрутили вниз — новую показываем с начала
+    const barH = (($('.viewer-bar') || {}).offsetHeight || 0) + ($('.topbar').offsetHeight || 0);
+    const top = viewer.getBoundingClientRect().top;
+    if (top < barH) window.scrollTo({ top: top + scrollY - barH, behavior: smooth ? 'smooth' : 'auto' });
+    updatePageInd();
   }
+
+  function flipPage(dir) {
+    const n = slides().length;
+    if (dir > 0 && curIdx >= n - 1) { if (flip.nextTopic) location.hash = flip.nextTopic; return; }
+    if (dir < 0 && curIdx <= 0) { if (flip.prevTopic) location.hash = flip.prevTopic; return; }
+    goToSlide(curIdx + dir);
+  }
+
+  function scrollToPage(p, smooth = true) {
+    const all = [...slides()];
+    const i = all.findIndex((sl) => +sl.firstChild.dataset.page === p);
+    if (i !== -1) goToSlide(i, smooth);
+  }
+
+  const chevronLeft = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>';
 
   // ---------- Масштаб ----------
   // zoom — ширина страниц относительно колонки. Картинка страницы всегда
@@ -214,8 +249,8 @@
   let zoomTimer;
 
   function applyZoomWidth() {
-    const pages = $('#pages');
-    if (pages) pages.style.width = `${zoom * 100}%`;
+    const viewer = $('#viewer');
+    if (viewer) viewer.style.setProperty('--zoom', zoom);
     const val = $('#zoomVal');
     if (val) val.textContent = `${Math.round(zoom * 100)}%`;
   }
@@ -225,22 +260,21 @@
     if (Math.abs(z - 1) < 0.04) z = 1;
     const viewer = $('#viewer');
     if (!viewer || z === zoom) return;
-    // запоминаем, какая точка страницы в центре экрана, чтобы после зума остаться там же
+    // запоминаем, какая точка текущей страницы в центре экрана, чтобы после зума остаться там же
+    const slide = slides()[curIdx];
+    const anchor = slide && slide.firstChild;
     const cy = innerHeight / 2;
-    const anchor = [...document.querySelectorAll('.page')].find((d) => {
-      const r = d.getBoundingClientRect();
-      return r.top <= cy && r.bottom >= cy;
-    });
     const frac = anchor ? (cy - anchor.getBoundingClientRect().top) / anchor.offsetHeight : 0;
-    const vw = viewer.clientWidth;
-    const xFrac = (viewer.scrollLeft + vw / 2) / viewer.scrollWidth;
+    const sw = slide ? slide.clientWidth : 0;
+    const xFrac = slide ? (slide.scrollLeft + sw / 2) / slide.scrollWidth : 0;
 
     zoom = z;
     store.set('zoom', zoom);
     applyZoomWidth();
 
     if (anchor) window.scrollTo(0, anchor.getBoundingClientRect().top + scrollY + frac * anchor.offsetHeight - cy);
-    viewer.scrollLeft = xFrac * viewer.scrollWidth - vw / 2;
+    if (slide) slide.scrollLeft = xFrac * slide.scrollWidth - sw / 2;
+    viewer.scrollLeft = curIdx * viewer.clientWidth;
     // пока пользователь крутит — страницы просто растягиваются, чёткость догоняет следом
     clearTimeout(zoomTimer);
     zoomTimer = setTimeout(refreshPages, 200);
@@ -258,6 +292,8 @@
     if (e.key === '+' || e.key === '=') setZoom(zoom * 1.25);
     else if (e.key === '-') setZoom(zoom * 0.8);
     else if (e.key === '0') setZoom(1);
+    else if (e.key === 'ArrowRight') { e.preventDefault(); flipPage(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); flipPage(-1); }
   });
 
   // ---------- PDF ----------
@@ -275,7 +311,7 @@
 
   async function renderPages(file, from, to, query, total) {
     const token = ++renderToken;
-    const box = $('#pages');
+    const box = $('#viewer');
     let doc;
     try { doc = await getDoc(file); } catch (e) {
       box.innerHTML = `<p class="muted">Не удалось загрузить PDF (${esc(e.message)}). Сайт нужно открывать через веб-сервер, а не как файл.</p>`;
@@ -286,13 +322,25 @@
     const vp0 = first.getViewport({ scale: 1 });
     box.innerHTML = '';
     for (let p = from; p <= to; p++) {
+      const slide = document.createElement('div');
+      slide.className = 'slide';
       const div = document.createElement('div');
       div.className = 'page loading';
       div.dataset.page = p;
       div.style.aspectRatio = `${vp0.width} / ${vp0.height}`;
-      box.appendChild(div);
+      slide.appendChild(div);
+      box.appendChild(slide);
     }
-    current = { doc, query, token, total };
+    const n = to - from + 1;
+    $('#dots').innerHTML = n > 1 && n <= 30 ? Array.from({ length: n }, (_, i) => `<button data-i="${i}" aria-label="Страница ${i + 1}"></button>`).join('') : '';
+    $('#dots').querySelectorAll('button').forEach((b) => (b.onclick = () => goToSlide(+b.dataset.i)));
+    curIdx = 0;
+    current = { doc, query, token, total, from };
+    box.onscroll = () => {
+      // свайп: текущий слайд = ближайший к левому краю
+      const i = Math.round(box.scrollLeft / box.clientWidth);
+      if (i !== curIdx) { curIdx = i; updatePageInd(); }
+    };
     if (observer) observer.disconnect();
     // рисуем только страницы рядом с экраном, далёкие — выгружаем
     observer = new IntersectionObserver((entries) => {
@@ -300,7 +348,7 @@
         if (e.isIntersecting) { if (needsDraw(e.target)) drawPage(e.target); }
         else if (e.target.dataset.rendered) unloadPage(e.target);
       }
-    }, { rootMargin: `${NEAR}px ${NEAR}px` });
+    }, { root: box, rootMargin: '0px 150%' }); // соседние страницы готовим заранее
     box.querySelectorAll('.page').forEach((d) => observer.observe(d));
     updatePageInd();
   }
@@ -330,8 +378,10 @@
   }
 
   function isNear(div) {
-    const r = div.getBoundingClientRect();
-    return r.bottom > -NEAR && r.top < innerHeight + NEAR;
+    const viewer = $('#viewer');
+    const r = div.parentNode.getBoundingClientRect();
+    const v = viewer.getBoundingClientRect();
+    return r.right > v.left - 1.5 * v.width && r.left < v.right + 1.5 * v.width;
   }
 
   function refreshPages() {
@@ -348,6 +398,7 @@
     div.dataset.rendered = '1';
     const page = await doc.getPage(+div.dataset.page);
     if (token !== renderToken || div._drawId !== drawId) return;
+    if (!div.isConnected) return;
     const cssWidth = div.clientWidth;
     const scale = cssWidth / page.getViewport({ scale: 1 }).width;
     const viewport = page.getViewport({ scale });
@@ -388,22 +439,25 @@
     if (div._drawId === drawId && needsDraw(div)) drawPage(div);
   }
 
-  // номер страницы, которая сейчас наверху экрана
+  // «2 / 4» в панели, точки под страницей, подпись кнопки на последней странице
   function updatePageInd() {
     const ind = $('#pageInd');
-    if (!ind || !current) return;
-    const y = 140;
-    const pages = document.querySelectorAll('.page');
-    let cur = pages[0];
-    for (const d of pages) { if (d.getBoundingClientRect().top <= y) cur = d; else break; }
-    if (cur) ind.textContent = `стр. ${cur.dataset.page} из ${current.total}`;
+    const all = slides();
+    if (!ind || !current || !all.length) return;
+    const n = all.length;
+    const pdfPage = all[curIdx].firstChild.dataset.page;
+    ind.textContent = `${curIdx + 1} / ${n}`;
+    ind.title = `стр. ${pdfPage} из ${current.total} в PDF`;
+    document.querySelectorAll('#dots button').forEach((b, i) => b.classList.toggle('active', i === curIdx));
+    const last = curIdx >= n - 1;
+    const nextBtn = $('#nextPage');
+    nextBtn.title = last ? (flip.nextTitle ? `Следующая тема: ${flip.nextTitle}` : 'Это последняя тема') : 'Следующая страница (→)';
+    const toTopic = last && !!flip.nextTopic;
+    nextBtn.classList.toggle('sq', !toTopic);
+    nextBtn.innerHTML = toTopic ? `<span class="hide-sm">Следующая тема</span><span class="show-sm">Тема</span> ${chevron}` : chevron;
+    nextBtn.disabled = last && !flip.nextTopic;
+    $('#prevPage').disabled = curIdx === 0 && !flip.prevTopic;
   }
-  let indQueued = false;
-  window.addEventListener('scroll', () => {
-    if (indQueued) return;
-    indQueued = true;
-    requestAnimationFrame(() => { indQueued = false; updatePageInd(); });
-  }, { passive: true });
 
   function highlight(spans, ts) {
     if (!ts.length) return;
@@ -421,7 +475,12 @@
   let resizeTimer;
   const onResize = () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if ($('#pages')) refreshPages(); }, 300);
+    resizeTimer = setTimeout(() => {
+      const viewer = $('#viewer');
+      if (!viewer) return;
+      viewer.scrollLeft = curIdx * viewer.clientWidth; // ширина поменялась — остаёмся на той же странице
+      refreshPages();
+    }, 300);
   };
   window.addEventListener('resize', onResize);
   if (window.visualViewport) {
